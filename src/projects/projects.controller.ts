@@ -1,9 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
 import { PermissionsService } from '../common/permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { SubscriptionGuard } from '../auth/subscription.guard';
 import type { AuthenticatedUser } from '../auth/supabase-auth.guard';
 import { CreateProjectDto } from './dto/create-project.dto';
 import {
@@ -35,6 +45,7 @@ const fullProjectInclude = {
 
 @ApiTags('projects')
 @ApiBearerAuth('bearer')
+@UseGuards(SubscriptionGuard)
 @Controller('organizations/:orgId/projects')
 export class ProjectsController {
   constructor(
@@ -44,7 +55,10 @@ export class ProjectsController {
   ) {}
 
   @Get()
-  async list(@Param('orgId') orgId: string, @CurrentUser() user: AuthenticatedUser) {
+  async list(
+    @Param('orgId') orgId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     await this.permissions.requireOrgMember(orgId, user.id);
     const projects = await this.prisma.project.findMany({
       where: { orgId },
@@ -107,7 +121,12 @@ export class ProjectsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.permissions.requireProjectManager(orgId, projectId, user.id);
-    return this.projects.updateMemberRole(orgId, projectId, targetUserId, dto.role);
+    return this.projects.updateMemberRole(
+      orgId,
+      projectId,
+      targetUserId,
+      dto.role,
+    );
   }
 
   @Patch(':projectId/members/:userId/hours')
@@ -119,7 +138,12 @@ export class ProjectsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.permissions.requireProjectManager(orgId, projectId, user.id);
-    return this.projects.updateMemberHours(orgId, projectId, targetUserId, dto.hours ?? null);
+    return this.projects.updateMemberHours(
+      orgId,
+      projectId,
+      targetUserId,
+      dto.hours ?? null,
+    );
   }
 
   @Delete(':projectId/members/:userId')
@@ -211,7 +235,13 @@ export class ProjectsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.permissions.requireProjectEdit(orgId, projectId, user.id);
-    return this.projects.createSprint(orgId, projectId, dto.name, dto.startDate, dto.endDate);
+    return this.projects.createSprint(
+      orgId,
+      projectId,
+      dto.name,
+      dto.startDate,
+      dto.endDate,
+    );
   }
 
   @Patch(':projectId/sprints/:sprintId/start')
@@ -257,7 +287,14 @@ export class ProjectsController {
   ) {
     await this.permissions.requireProjectEdit(orgId, projectId, user.id);
     const { historyText, ...patch } = dto;
-    return this.projects.updateStoreItem(orgId, projectId, itemId, user.id, patch, historyText);
+    return this.projects.updateStoreItem(
+      orgId,
+      projectId,
+      itemId,
+      user.id,
+      patch,
+      historyText,
+    );
   }
 
   @Delete(':projectId/store/:itemId')

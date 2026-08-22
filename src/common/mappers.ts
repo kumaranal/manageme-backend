@@ -12,6 +12,7 @@ import type {
   Status,
   StoreItem,
   StoreHistoryEntry,
+  Subscription,
   TaskField,
   User,
 } from '@prisma/client';
@@ -19,11 +20,18 @@ import type {
 // Reshapes Prisma's schema-idiomatic field names (leadId, assigneeId, cc rows, etc.)
 // into exactly what the frontend's src/types/index.ts expects.
 
-const dateOnly = (d: Date | null): string | null => (d ? d.toISOString().slice(0, 10) : null);
+const dateOnly = (d: Date | null): string | null =>
+  d ? d.toISOString().slice(0, 10) : null;
 const iso = (d: Date): string => d.toISOString();
 
 export function mapUser(u: User) {
-  return { id: u.id, name: u.name, email: u.email, initials: u.initials, isSuperadmin: u.isSuperadmin };
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    initials: u.initials,
+    isSuperadmin: u.isSuperadmin,
+  };
 }
 
 export function mapMembership(m: Membership) {
@@ -31,7 +39,13 @@ export function mapMembership(m: Membership) {
 }
 
 export function mapInvite(i: Invite) {
-  return { id: i.id, email: i.email, role: i.role, at: iso(i.createdAt), token: i.token };
+  return {
+    id: i.id,
+    email: i.email,
+    role: i.role,
+    at: iso(i.createdAt),
+    token: i.token,
+  };
 }
 
 export function mapProjectMembership(m: ProjectMembership) {
@@ -39,7 +53,12 @@ export function mapProjectMembership(m: ProjectMembership) {
 }
 
 export function mapTaskField(f: TaskField) {
-  return { id: f.fieldKey, label: f.label, enabled: f.enabled, required: f.required };
+  return {
+    id: f.fieldKey,
+    label: f.label,
+    enabled: f.enabled,
+    required: f.required,
+  };
 }
 
 export function mapStatus(s: Status) {
@@ -47,7 +66,13 @@ export function mapStatus(s: Status) {
 }
 
 export function mapSprint(s: Sprint) {
-  return { id: s.id, name: s.name, startDate: dateOnly(s.startDate)!, endDate: dateOnly(s.endDate)!, status: s.status };
+  return {
+    id: s.id,
+    name: s.name,
+    startDate: dateOnly(s.startDate)!,
+    endDate: dateOnly(s.endDate)!,
+    status: s.status,
+  };
 }
 
 export function mapComment(c: Comment) {
@@ -58,7 +83,11 @@ export function mapActivityEntry(a: ActivityEntry) {
   return { id: a.id, actor: a.actorId, text: a.text, at: iso(a.createdAt) };
 }
 
-type IssueWithRelations = Issue & { comments: Comment[]; activity: ActivityEntry[]; cc: IssueCc[] };
+type IssueWithRelations = Issue & {
+  comments: Comment[];
+  activity: ActivityEntry[];
+  cc: IssueCc[];
+};
 
 export function mapIssue(i: IssueWithRelations) {
   return {
@@ -126,10 +155,20 @@ export function mapProject(p: ProjectWithRelations) {
   };
 }
 
+export function mapSubscription(s: Subscription) {
+  return {
+    planId: s.planId,
+    currentPeriodStart: iso(s.currentPeriodStart),
+    currentPeriodEnd: iso(s.currentPeriodEnd),
+    active: s.currentPeriodEnd.getTime() > Date.now(),
+  };
+}
+
 type OrganizationWithRelations = Organization & {
   members: Membership[];
   invites: Invite[];
   projects: ProjectWithRelations[];
+  subscription: Subscription | null;
 };
 
 export function mapOrganization(o: OrganizationWithRelations) {
@@ -143,5 +182,6 @@ export function mapOrganization(o: OrganizationWithRelations) {
     members: o.members.map(mapMembership),
     invites: o.invites.map(mapInvite),
     projects: o.projects.map(mapProject),
+    subscription: o.subscription ? mapSubscription(o.subscription) : null,
   };
 }

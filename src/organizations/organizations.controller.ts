@@ -2,25 +2,28 @@ import {
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrganizationsService } from './organizations.service';
 import { PermissionsService } from '../common/permissions.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Public } from '../auth/public.decorator';
+import { SuperadminGuard } from '../auth/superadmin.guard';
+import { SubscriptionGuard } from '../auth/subscription.guard';
+import { SkipSubscriptionCheck } from '../auth/skip-subscription-check.decorator';
 import type { AuthenticatedUser } from '../auth/supabase-auth.guard';
-import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { UpdateCapacityDto } from './dto/update-capacity.dto';
 
 @ApiTags('organizations')
 @ApiBearerAuth('bearer')
+@UseGuards(SubscriptionGuard)
 @Controller()
 export class OrganizationsController {
   constructor(
@@ -34,8 +37,8 @@ export class OrganizationsController {
   }
 
   @Get('organizations/all')
-  listAll(@CurrentUser() user: AuthenticatedUser) {
-    this.requireSuperadmin(user);
+  @UseGuards(SuperadminGuard)
+  listAll() {
     return this.organizations.listAll();
   }
 
@@ -45,14 +48,13 @@ export class OrganizationsController {
   }
 
   @Get('organizations/:orgId')
-  async findOne(@Param('orgId') orgId: string, @CurrentUser() user: AuthenticatedUser) {
-    await this.permissions.requireOrgMember(orgId, user.id);
+  @SkipSubscriptionCheck()
+  async findOne(
+    @Param('orgId') orgId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!user.isSuperadmin) await this.permissions.requireOrgMember(orgId, user.id);
     return this.organizations.findOneOrThrow(orgId);
-  }
-
-  @Post('organizations')
-  create(@Body() dto: CreateOrganizationDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.organizations.create(user.id, dto.name);
   }
 
   @Post('organizations/:orgId/join')
@@ -61,8 +63,8 @@ export class OrganizationsController {
   }
 
   @Patch('organizations/:orgId/suspend')
-  toggleSuspend(@Param('orgId') orgId: string, @CurrentUser() user: AuthenticatedUser) {
-    this.requireSuperadmin(user);
+  @UseGuards(SuperadminGuard)
+  toggleSuspend(@Param('orgId') orgId: string) {
     return this.organizations.toggleSuspend(orgId);
   }
 
@@ -83,7 +85,12 @@ export class OrganizationsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.permissions.requireOrgAdmin(orgId, user.id);
-    return this.organizations.inviteMember(orgId, dto.email, dto.role, user.name);
+    return this.organizations.inviteMember(
+      orgId,
+      dto.email,
+      dto.role,
+      user.name,
+    );
   }
 
   @Delete('organizations/:orgId/invites/:inviteId')
@@ -104,7 +111,10 @@ export class OrganizationsController {
   }
 
   @Post('invites/:token/accept')
-  acceptInvite(@Param('token') token: string, @CurrentUser() user: AuthenticatedUser) {
+  acceptInvite(
+    @Param('token') token: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.organizations.acceptInvite(user.id, user.email, token);
   }
 
@@ -127,9 +137,5 @@ export class OrganizationsController {
   ) {
     await this.permissions.requireOrgAdmin(orgId, user.id);
     return this.organizations.removeMember(orgId, userId);
-  }
-
-  private requireSuperadmin(user: AuthenticatedUser) {
-    if (!user.isSuperadmin) throw new ForbiddenException('Requires superadmin');
   }
 }
