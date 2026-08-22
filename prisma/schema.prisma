@@ -24,6 +24,8 @@ model User {
   activityEntries     ActivityEntry[]
   storeItemUpdates    StoreItem[]         @relation("StoreItemUpdatedBy")
   storeHistoryEntries StoreHistoryEntry[]
+  checkoutSessions    CheckoutSession[]
+  payments            Payment[]
 
   @@map("users")
 }
@@ -42,9 +44,11 @@ model Organization {
   capacityHoursPerWeek Int       @default(40)
   createdAt            DateTime  @default(now())
 
-  members  Membership[]
-  invites  Invite[]
-  projects Project[]
+  members      Membership[]
+  invites      Invite[]
+  projects     Project[]
+  subscription Subscription?
+  payments     Payment[]
 
   @@map("organizations")
 }
@@ -298,4 +302,147 @@ model StoreHistoryEntry {
   actor     User      @relation(fields: [actorId], references: [id])
 
   @@map("store_history_entries")
+}
+
+// --- Billing --------------------------------------------------------------
+// Money is stored as integer smallest-unit amounts (paise for INR, cents for
+// USD) — matches what Razorpay/Stripe expect natively and avoids float math.
+
+enum BillingCurrency {
+  INR
+  USD
+}
+
+enum PaymentGateway {
+  RAZORPAY
+  STRIPE
+}
+
+enum CheckoutKind {
+  NEW_ORG
+  RENEWAL
+}
+
+enum CheckoutStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum CouponDiscountType {
+  PERCENT
+  FIXED
+}
+
+model SubscriptionPlan {
+  id            String   @id @default(cuid())
+  name          String
+  description   String   @default("")
+  periodDays    Int
+  priceInrPaise Int
+  priceUsdCents Int
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  checkoutSessions CheckoutSession[]
+  subscriptions    Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Coupon {
+  id               String             @id @default(cuid())
+  code             String             @unique
+  discountType     CouponDiscountType
+  percentOff       Int?
+  fixedOffInrPaise Int?
+  fixedOffUsdCents Int?
+  maxRedemptions   Int?
+  timesRedeemed    Int                @default(0)
+  active           Boolean            @default(true)
+  expiresAt        DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  checkoutSessions CheckoutSession[]
+
+  @@map("coupons")
+}
+
+// Holds checkout intent until payment is confirmed — the Organization row
+// itself is only created once a checkout finalizes successfully.
+model CheckoutSession {
+  id     String       @id @default(cuid())
+  userId String       @db.Uuid
+  kind   CheckoutKind
+
+  orgName    String? // set when kind = NEW_ORG
+  renewOrgId String? // set when kind = RENEWAL
+
+  planId   String
+  couponId String?
+  currency BillingCurrency
+  gateway  PaymentGateway
+
+  subtotalAmount Int
+  discountAmount Int            @default(0)
+  totalAmount    Int
+  status         CheckoutStatus @default(PENDING)
+
+  gatewayOrderId   String? // razorpay order id / stripe checkout session id
+  gatewayPaymentId String? // set once payment is confirmed
+  createdOrgId     String? // set once the org is created (kind = NEW_ORG)
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User             @relation(fields: [userId], references: [id])
+  plan    SubscriptionPlan @relation(fields: [planId], references: [id])
+  coupon  Coupon?          @relation(fields: [couponId], references: [id])
+  payment Payment?
+
+  @@map("checkout_sessions")
+}
+
+// No stored status: "expired" is computed as currentPeriodEnd < now()
+// wherever it's read, so there's no cron job needed to keep it in sync.
+model Subscription {
+  id                 String   @id @default(cuid())
+  orgId              String   @unique
+  planId             String
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  org      Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@map("subscriptions")
+}
+
+// Immutable ledger of successful charges only — created exclusively by the
+// checkout finalize step. This is the source of truth for financial analytics.
+model Payment {
+  id                String   @id @default(cuid())
+  checkoutSessionId String   @unique
+  orgId             String
+  subscriptionId    String
+  userId            String   @db.Uuid
+  gateway           PaymentGateway
+  currency          BillingCurrency
+  amount            Int
+  gatewayPaymentId  String
+  createdAt         DateTime @default(now())
+
+  checkoutSession CheckoutSession @relation(fields: [checkoutSessionId], references: [id])
+  org             Organization    @relation(fields: [orgId], references: [id])
+  subscription    Subscription    @relation(fields: [subscriptionId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+
+  @@map("payments")
 }

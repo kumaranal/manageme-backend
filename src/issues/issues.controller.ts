@@ -1,8 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IssuesService } from './issues.service';
 import { PermissionsService } from '../common/permissions.service';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { SubscriptionGuard } from '../auth/subscription.guard';
 import type { AuthenticatedUser } from '../auth/supabase-auth.guard';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
@@ -11,6 +22,7 @@ import { AddCommentDto } from './dto/add-comment.dto';
 
 @ApiTags('issues')
 @ApiBearerAuth('bearer')
+@UseGuards(SubscriptionGuard)
 @Controller('organizations/:orgId/projects/:projectId/issues')
 export class IssuesController {
   constructor(
@@ -49,7 +61,14 @@ export class IssuesController {
   ) {
     await this.permissions.requireProjectEdit(orgId, projectId, user.id);
     const { activityText, ...patch } = dto;
-    return this.issues.update(orgId, projectId, issueId, user.id, patch, activityText);
+    return this.issues.update(
+      orgId,
+      projectId,
+      issueId,
+      user.id,
+      patch,
+      activityText,
+    );
   }
 
   @Patch(':issueId/move')
@@ -61,7 +80,14 @@ export class IssuesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.permissions.requireProjectEdit(orgId, projectId, user.id);
-    return this.issues.move(orgId, projectId, issueId, user.id, dto.statusId, dto.index);
+    return this.issues.move(
+      orgId,
+      projectId,
+      issueId,
+      user.id,
+      dto.statusId,
+      dto.index,
+    );
   }
 
   @Post(':issueId/comments')
