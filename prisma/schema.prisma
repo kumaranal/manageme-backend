@@ -1,0 +1,301 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Mirrors auth.users (Supabase Auth). Row is created/synced on first login.
+model User {
+  id            String   @id @db.Uuid
+  email         String   @unique
+  name          String
+  initials      String
+  isSuperadmin  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  memberships        Membership[]
+  projectMemberships ProjectMembership[]
+  leadOfProjects      Project[]           @relation("ProjectLead")
+  assignedIssues      Issue[]             @relation("IssueAssignee")
+  ccOnIssues          IssueCc[]
+  comments            Comment[]
+  activityEntries     ActivityEntry[]
+  storeItemUpdates    StoreItem[]         @relation("StoreItemUpdatedBy")
+  storeHistoryEntries StoreHistoryEntry[]
+
+  @@map("users")
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model Organization {
+  id                   String    @id @default(cuid())
+  name                 String
+  slug                 String    @unique
+  initial              String
+  status               OrgStatus @default(ACTIVE)
+  capacityHoursPerWeek Int       @default(40)
+  createdAt            DateTime  @default(now())
+
+  members  Membership[]
+  invites  Invite[]
+  projects Project[]
+
+  @@map("organizations")
+}
+
+enum OrgRole {
+  ORG_ADMIN
+  MEMBER
+}
+
+model Membership {
+  orgId  String
+  userId String  @db.Uuid
+  role   OrgRole
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([orgId, userId])
+  @@map("memberships")
+}
+
+model Invite {
+  id        String   @id @default(cuid())
+  orgId     String
+  email     String
+  role      OrgRole
+  token     String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("invites")
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  orgId         String
+  key           String
+  name          String
+  blurb         String   @default("")
+  leadId        String   @db.Uuid
+  counter       Int      @default(0)
+  archived      Boolean  @default(false)
+  sprintLengthWeeks Int  @default(2)
+  createdAt     DateTime @default(now())
+
+  org           Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  lead          User                @relation("ProjectLead", fields: [leadId], references: [id])
+  members       ProjectMembership[]
+  taskFields    TaskField[]
+  statuses      Status[]
+  sprints       Sprint[]
+  issues        Issue[]
+  storeItems    StoreItem[]
+
+  @@unique([orgId, key])
+  @@map("projects")
+}
+
+enum ProjectRole {
+  LEAD
+  CONTRIBUTOR
+  VIEWER
+}
+
+model ProjectMembership {
+  projectId   String
+  userId      String      @db.Uuid
+  role        ProjectRole
+  weeklyHours Int?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@map("project_memberships")
+}
+
+enum TaskFieldKey {
+  priority
+  assignee
+  dueDate
+  labels
+  estimatedHours
+}
+
+model TaskField {
+  projectId String
+  fieldKey  TaskFieldKey
+  label     String
+  enabled   Boolean @default(true)
+  required  Boolean @default(false)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, fieldKey])
+  @@map("task_fields")
+}
+
+enum StatusCategory {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+model Status {
+  id       String         @id @default(cuid())
+  projectId String
+  name     String
+  category StatusCategory
+  position Int
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  Issue[]
+
+  @@unique([projectId, position])
+  @@map("statuses")
+}
+
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+model Sprint {
+  id        String       @id @default(cuid())
+  projectId String
+  name      String
+  startDate DateTime     @db.Date
+  endDate   DateTime     @db.Date
+  status    SprintStatus @default(PLANNED)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  Issue[]
+
+  @@map("sprints")
+}
+
+enum IssueType {
+  Task
+  Story
+  Bug
+}
+
+enum Priority {
+  Urgent
+  High
+  Medium
+  Low
+}
+
+model Issue {
+  id             String    @id @default(cuid())
+  projectId      String
+  number         Int
+  title          String
+  type           IssueType
+  priority       Priority
+  assigneeId     String?   @db.Uuid
+  statusId       String
+  rank           Float
+  due            DateTime? @db.Date
+  labels         String[]  @default([])
+  estimatedHours Float?
+  sprintId       String?
+  createdAt      DateTime  @default(now())
+
+  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?           @relation("IssueAssignee", fields: [assigneeId], references: [id])
+  status   Status          @relation(fields: [statusId], references: [id])
+  sprint   Sprint?         @relation(fields: [sprintId], references: [id])
+  cc       IssueCc[]
+  comments Comment[]
+  activity ActivityEntry[]
+
+  @@unique([projectId, number])
+  @@index([projectId, statusId])
+  @@map("issues")
+}
+
+model IssueCc {
+  issueId String
+  userId  String @db.Uuid
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([issueId, userId])
+  @@map("issue_cc")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  issueId   String
+  authorId  String   @db.Uuid
+  body      String
+  createdAt DateTime @default(now())
+
+  issue  Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id])
+
+  @@map("comments")
+}
+
+model ActivityEntry {
+  id        String   @id @default(cuid())
+  issueId   String
+  actorId   String   @db.Uuid
+  text      String
+  createdAt DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  actor User  @relation(fields: [actorId], references: [id])
+
+  @@map("activity_entries")
+}
+
+enum StoreKind {
+  DOC
+  ENV
+  LINK
+  NOTE
+}
+
+model StoreItem {
+  id          String    @id @default(cuid())
+  projectId   String
+  title       String
+  kind        StoreKind
+  content     String
+  updatedById String    @db.Uuid
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  project   Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  updatedBy User                @relation("StoreItemUpdatedBy", fields: [updatedById], references: [id])
+  history   StoreHistoryEntry[]
+
+  @@map("store_items")
+}
+
+model StoreHistoryEntry {
+  id          String   @id @default(cuid())
+  storeItemId String
+  actorId     String   @db.Uuid
+  text        String
+  at          DateTime @default(now())
+
+  storeItem StoreItem @relation(fields: [storeItemId], references: [id], onDelete: Cascade)
+  actor     User      @relation(fields: [actorId], references: [id])
+
+  @@map("store_history_entries")
+}
