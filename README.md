@@ -57,7 +57,19 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
-## Deployment
+## Deployment (Render)
+
+This repo includes a `render.yaml` Blueprint. In the Render dashboard, use "New +" -> "Blueprint" and point it at this repo; Render will create the web service with the build/start commands already configured (`prisma generate` runs automatically via `postinstall`, and `prisma migrate deploy` runs on every boot before the server starts).
+
+After the service is created, fill in the env vars Render leaves blank (marked `sync: false` in `render.yaml`):
+
+- `DATABASE_URL` — Supabase transaction-mode pooler connection string
+- `DIRECT_URL` — Supabase session-mode pooler connection string (used for migrations)
+- `SUPABASE_URL` — Supabase project URL
+- `FRONTEND_URL` — deployed frontend origin(s), comma-separated
+- `RESEND_API_KEY` / `RESEND_FROM_EMAIL` — optional, org invite emails
+- `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` — optional, INR billing
+- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — optional, USD billing
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 

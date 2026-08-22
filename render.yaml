@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: manageme-backend
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run db:deploy && npm run start:prod
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.2
+      # Supabase transaction-mode pooler (pgbouncer) — used by the app at runtime.
+      - key: DATABASE_URL
+        sync: false
+      # Supabase session-mode pooler — used only by `prisma migrate deploy` on boot.
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      # Deployed frontend origin, comma-separated if there's more than one.
+      - key: FRONTEND_URL
+        sync: false
+      # Optional: org invite emails. Billing/email endpoints degrade gracefully without these.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      # Optional: Razorpay (INR) billing. Endpoints return 503 until set.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      # Optional: Stripe (USD) billing. Endpoints return 503 until set.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
