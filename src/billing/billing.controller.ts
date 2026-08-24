@@ -48,6 +48,7 @@ export class BillingController {
     private readonly stripe: StripeProvider,
   ) {}
 
+  @Public()
   @Get('plans')
   listPlans() {
     return this.plans.listActive();
