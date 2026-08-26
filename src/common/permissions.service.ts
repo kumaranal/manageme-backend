@@ -19,7 +19,8 @@ export class PermissionsService {
 
   async requireOrgMember(orgId: string, userId: string): Promise<OrgRole> {
     const role = await this.orgRole(orgId, userId);
-    if (!role) throw new ForbiddenException('Not a member of this organization');
+    if (!role)
+      throw new ForbiddenException('Not a member of this organization');
     return role;
   }
 
@@ -30,7 +31,11 @@ export class PermissionsService {
   }
 
   // Org admins act as an implicit project LEAD, matching the frontend's projectRole().
-  async projectRole(orgId: string, projectId: string, userId: string): Promise<ProjectRole | null> {
+  async projectRole(
+    orgId: string,
+    projectId: string,
+    userId: string,
+  ): Promise<ProjectRole | null> {
     if (await this.isOrgAdmin(orgId, userId)) return 'LEAD';
     const membership = await this.prisma.projectMembership.findUnique({
       where: { projectId_userId: { projectId, userId } },
@@ -38,27 +43,47 @@ export class PermissionsService {
     return membership?.role ?? null;
   }
 
-  async canEditProject(orgId: string, projectId: string, userId: string): Promise<boolean> {
+  async canEditProject(
+    orgId: string,
+    projectId: string,
+    userId: string,
+  ): Promise<boolean> {
     const role = await this.projectRole(orgId, projectId, userId);
     return role === 'LEAD' || role === 'CONTRIBUTOR';
   }
 
-  async isProjectManager(orgId: string, projectId: string, userId: string): Promise<boolean> {
+  async isProjectManager(
+    orgId: string,
+    projectId: string,
+    userId: string,
+  ): Promise<boolean> {
     return (await this.projectRole(orgId, projectId, userId)) === 'LEAD';
   }
 
-  async requireProjectRead(orgId: string, projectId: string, userId: string): Promise<void> {
+  async requireProjectRead(
+    orgId: string,
+    projectId: string,
+    userId: string,
+  ): Promise<void> {
     const role = await this.projectRole(orgId, projectId, userId);
     if (!role) throw new ForbiddenException('Not a member of this project');
   }
 
-  async requireProjectEdit(orgId: string, projectId: string, userId: string): Promise<void> {
+  async requireProjectEdit(
+    orgId: string,
+    projectId: string,
+    userId: string,
+  ): Promise<void> {
     if (!(await this.canEditProject(orgId, projectId, userId))) {
       throw new ForbiddenException('Requires project lead or contributor');
     }
   }
 
-  async requireProjectManager(orgId: string, projectId: string, userId: string): Promise<void> {
+  async requireProjectManager(
+    orgId: string,
+    projectId: string,
+    userId: string,
+  ): Promise<void> {
     if (!(await this.isProjectManager(orgId, projectId, userId))) {
       throw new ForbiddenException('Requires project lead');
     }

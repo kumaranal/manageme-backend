@@ -24,7 +24,10 @@ export class UsersController {
     @Query('ids') ids?: string,
   ) {
     if (ids) {
-      const users = await this.usersService.findByIds(user.id, ids.split(',').filter(Boolean));
+      const users = await this.usersService.findByIds(
+        user.id,
+        ids.split(',').filter(Boolean),
+      );
       return users.map(mapUser);
     }
     const users = await this.usersService.search(user.id, query ?? '');

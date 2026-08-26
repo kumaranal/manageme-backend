@@ -22,5 +22,6 @@ export class CreateCheckoutDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   couponCode?: string;
 }

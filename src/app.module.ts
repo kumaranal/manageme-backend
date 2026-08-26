@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { CommonModule } from './common/common.module';
 import { EmailModule } from './email/email.module';
+import { StorageModule } from './storage/storage.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { OrganizationsModule } from './organizations/organizations.module';
@@ -19,6 +20,7 @@ import { AdminModule } from './admin/admin.module';
     PrismaModule,
     CommonModule,
     EmailModule,
+    StorageModule,
     AuthModule,
     UsersModule,
     OrganizationsModule,

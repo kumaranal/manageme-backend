@@ -1,25 +1,41 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { IssueType, Priority } from '@prisma/client';
 
+const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
+
 const issueInclude = {
-  comments: { orderBy: { createdAt: 'asc' as const } },
+  comments: { orderBy: { createdAt: 'desc' as const } },
   activity: { orderBy: { createdAt: 'desc' as const } },
+  attachments: { orderBy: { createdAt: 'asc' as const } },
   cc: true,
 };
 
 @Injectable()
 export class IssuesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   private async requireProject(orgId: string, projectId: string) {
-    const project = await this.prisma.project.findFirst({ where: { id: projectId, orgId } });
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, orgId },
+    });
     if (!project) throw new NotFoundException('Project not found');
     return project;
   }
 
   private async requireIssue(projectId: string, issueId: string) {
-    const issue = await this.prisma.issue.findFirst({ where: { id: issueId, projectId } });
+    const issue = await this.prisma.issue.findFirst({
+      where: { id: issueId, projectId },
+    });
     if (!issue) throw new NotFoundException('Issue not found');
     return issue;
   }
@@ -38,6 +54,7 @@ export class IssuesService {
     userId: string,
     data: {
       title: string;
+      description?: string;
       type: IssueType;
       statusId: string;
       priority: Priority;
@@ -70,6 +87,7 @@ export class IssuesService {
         projectId,
         number: project.counter,
         title: data.title,
+        description: data.description ?? '',
         type: data.type,
         priority: data.priority,
         assigneeId: data.assignee ?? null,
@@ -92,6 +110,7 @@ export class IssuesService {
     userId: string,
     patch: {
       title?: string;
+      description?: string;
       type?: IssueType;
       priority?: Priority;
       assignee?: string | null;
@@ -108,19 +127,25 @@ export class IssuesService {
 
     const data: Record<string, unknown> = {};
     if (patch.title !== undefined) data.title = patch.title;
+    if (patch.description !== undefined) data.description = patch.description;
     if (patch.type !== undefined) data.type = patch.type;
     if (patch.priority !== undefined) data.priority = patch.priority;
     if (patch.assignee !== undefined) data.assigneeId = patch.assignee;
     if (patch.statusId !== undefined) data.statusId = patch.statusId;
     if (patch.labels !== undefined) data.labels = patch.labels;
-    if (patch.estimatedHours !== undefined) data.estimatedHours = patch.estimatedHours;
+    if (patch.estimatedHours !== undefined)
+      data.estimatedHours = patch.estimatedHours;
 
     if (patch.sprintId !== undefined) {
       data.sprintId = patch.sprintId;
       const sprint = patch.sprintId
         ? await this.prisma.sprint.findUnique({ where: { id: patch.sprintId } })
         : null;
-      data.due = sprint ? sprint.endDate : patch.due ? new Date(patch.due) : null;
+      data.due = sprint
+        ? sprint.endDate
+        : patch.due
+          ? new Date(patch.due)
+          : null;
     } else if (patch.due !== undefined) {
       data.due = patch.due ? new Date(patch.due) : null;
     }
@@ -129,10 +154,21 @@ export class IssuesService {
       data.activity = { create: { actorId: userId, text: activityText } };
     }
 
-    return this.prisma.issue.update({ where: { id: issueId }, data, include: issueInclude });
+    return this.prisma.issue.update({
+      where: { id: issueId },
+      data,
+      include: issueInclude,
+    });
   }
 
-  async move(orgId: string, projectId: string, issueId: string, userId: string, statusId: string, index: number) {
+  async move(
+    orgId: string,
+    projectId: string,
+    issueId: string,
+    userId: string,
+    statusId: string,
+    index: number,
+  ) {
     await this.requireProject(orgId, projectId);
     const issue = await this.requireIssue(projectId, issueId);
 
@@ -143,18 +179,25 @@ export class IssuesService {
     const prev = column[index - 1];
     const next = column[index];
     const lo = prev ? prev.rank : 0;
-    const hi = next ? next.rank : column.length ? column[column.length - 1].rank + 2000 : 2000;
+    const hi = next
+      ? next.rank
+      : column.length
+        ? column[column.length - 1].rank + 2000
+        : 2000;
     const rank = prev || next ? (lo + hi) / 2 : 1000;
 
     const statusChanged = issue.statusId !== statusId;
-    let activityCreate: { create: { actorId: string; text: string } } | undefined;
+    let activityCreate:
+      { create: { actorId: string; text: string } } | undefined;
     if (statusChanged) {
       const [from, to] = await Promise.all([
         this.prisma.status.findUnique({ where: { id: issue.statusId } }),
         this.prisma.status.findUnique({ where: { id: statusId } }),
       ]);
       if (from && to) {
-        activityCreate = { create: { actorId: userId, text: `moved ${from.name} → ${to.name}` } };
+        activityCreate = {
+          create: { actorId: userId, text: `moved ${from.name} → ${to.name}` },
+        };
       }
     }
 
@@ -169,17 +212,33 @@ export class IssuesService {
     });
   }
 
-  async addComment(orgId: string, projectId: string, issueId: string, userId: string, body: string) {
+  async addComment(
+    orgId: string,
+    projectId: string,
+    issueId: string,
+    userId: string,
+    body: string,
+  ) {
     await this.requireProject(orgId, projectId);
     await this.requireIssue(projectId, issueId);
-    await this.prisma.comment.create({ data: { issueId, authorId: userId, body } });
+    await this.prisma.comment.create({
+      data: { issueId, authorId: userId, body },
+    });
     await this.prisma.activityEntry.create({
       data: { issueId, actorId: userId, text: 'commented' },
     });
-    return this.prisma.issue.findUniqueOrThrow({ where: { id: issueId }, include: issueInclude });
+    return this.prisma.issue.findUniqueOrThrow({
+      where: { id: issueId },
+      include: issueInclude,
+    });
   }
 
-  async addCc(orgId: string, projectId: string, issueId: string, ccUserId: string) {
+  async addCc(
+    orgId: string,
+    projectId: string,
+    issueId: string,
+    ccUserId: string,
+  ) {
     await this.requireProject(orgId, projectId);
     await this.requireIssue(projectId, issueId);
     await this.prisma.issueCc.upsert({
@@ -187,13 +246,103 @@ export class IssuesService {
       update: {},
       create: { issueId, userId: ccUserId },
     });
-    return this.prisma.issue.findUniqueOrThrow({ where: { id: issueId }, include: issueInclude });
+    return this.prisma.issue.findUniqueOrThrow({
+      where: { id: issueId },
+      include: issueInclude,
+    });
   }
 
-  async removeCc(orgId: string, projectId: string, issueId: string, ccUserId: string) {
+  async removeCc(
+    orgId: string,
+    projectId: string,
+    issueId: string,
+    ccUserId: string,
+  ) {
     await this.requireProject(orgId, projectId);
     await this.requireIssue(projectId, issueId);
-    await this.prisma.issueCc.deleteMany({ where: { issueId, userId: ccUserId } });
-    return this.prisma.issue.findUniqueOrThrow({ where: { id: issueId }, include: issueInclude });
+    await this.prisma.issueCc.deleteMany({
+      where: { issueId, userId: ccUserId },
+    });
+    return this.prisma.issue.findUniqueOrThrow({
+      where: { id: issueId },
+      include: issueInclude,
+    });
+  }
+
+  async addAttachment(
+    orgId: string,
+    projectId: string,
+    issueId: string,
+    userId: string,
+    file: {
+      originalname: string;
+      buffer: Buffer;
+      size: number;
+      mimetype: string;
+    },
+  ) {
+    if (!file) throw new BadRequestException('No file provided');
+    if (file.size > MAX_ATTACHMENT_SIZE_BYTES)
+      throw new BadRequestException('File exceeds the 25 MB limit');
+
+    await this.requireProject(orgId, projectId);
+    await this.requireIssue(projectId, issueId);
+
+    const filename = file.originalname;
+    // S3 keys must stick to a safe ASCII subset — filenames from macOS
+    // screenshots etc. can carry non-ASCII whitespace (e.g. U+202F) that
+    // Supabase's S3 backend rejects outright with InvalidKey.
+    const keySafeName = filename.replace(/[^A-Za-z0-9._-]/g, '_');
+    const key = `${orgId}/${projectId}/${issueId}/${randomUUID()}-${keySafeName}`;
+    await this.storage.uploadObject(key, file.buffer, file.mimetype);
+
+    await this.prisma.attachment.create({
+      data: {
+        issueId,
+        uploadedById: userId,
+        filename,
+        path: key,
+        // Placeholder — the bucket is private, so real (signed, expiring)
+        // URLs are generated at read time in mappers.ts, not stored here.
+        url: key,
+        size: file.size,
+        mimeType: file.mimetype,
+      },
+    });
+    await this.prisma.activityEntry.create({
+      data: { issueId, actorId: userId, text: `attached ${filename}` },
+    });
+    return this.prisma.issue.findUniqueOrThrow({
+      where: { id: issueId },
+      include: issueInclude,
+    });
+  }
+
+  async removeAttachment(
+    orgId: string,
+    projectId: string,
+    issueId: string,
+    attachmentId: string,
+    userId: string,
+  ) {
+    await this.requireProject(orgId, projectId);
+    await this.requireIssue(projectId, issueId);
+    const attachment = await this.prisma.attachment.findFirst({
+      where: { id: attachmentId, issueId },
+    });
+    if (!attachment) throw new NotFoundException('Attachment not found');
+    await this.prisma.attachment.delete({ where: { id: attachmentId } });
+    await this.storage.deleteObject(attachment.path);
+    await this.prisma.activityEntry.create({
+      data: {
+        issueId,
+        actorId: userId,
+        text: `removed ${attachment.filename}`,
+      },
+    });
+    return this.prisma.issue.findUniqueOrThrow({
+      where: { id: issueId },
+      include: issueInclude,
+    });
   }
 }

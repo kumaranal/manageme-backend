@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
 } from 'class-validator';
 import { IssueType, Priority } from '@prisma/client';
 
@@ -13,6 +14,11 @@ export class CreateIssueDto {
   @IsString()
   @IsNotEmpty()
   title!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20000)
+  description?: string;
 
   @IsIn(['Task', 'Story', 'Bug'])
   type!: IssueType;

@@ -24,7 +24,11 @@ export function deriveProjectKey(name: string, existingKeys: string[]): string {
     .join('')
     .toUpperCase()
     .replace(/[^A-Z]/g, '');
-  const base = (letters || name.replace(/[^a-zA-Z]/g, '').toUpperCase() || 'PRJ').slice(0, 4) || 'PRJ';
+  const base =
+    (letters || name.replace(/[^a-zA-Z]/g, '').toUpperCase() || 'PRJ').slice(
+      0,
+      4,
+    ) || 'PRJ';
   if (!existingKeys.includes(base)) return base;
   let n = 2;
   while (existingKeys.includes(`${base}${n}`)) n += 1;

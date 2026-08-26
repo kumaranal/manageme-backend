@@ -21,8 +21,10 @@ export class EmailService {
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     this.resend = apiKey ? new Resend(apiKey) : null;
-    this.fromEmail = this.config.get<string>('RESEND_FROM_EMAIL') ?? 'onboarding@resend.dev';
-    this.frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    this.fromEmail =
+      this.config.get<string>('RESEND_FROM_EMAIL') ?? 'onboarding@resend.dev';
+    this.frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
   }
 
   async sendOrgInvite(params: {
@@ -31,10 +33,12 @@ export class EmailService {
     inviterName: string;
     role: string;
     token: string;
-  }): Promise<void> {
+  }): Promise<boolean> {
     if (!this.resend) {
-      this.logger.warn(`RESEND_API_KEY not set — skipping invite email to ${params.to}`);
-      return;
+      this.logger.warn(
+        `RESEND_API_KEY not set — skipping invite email to ${params.to}`,
+      );
+      return false;
     }
 
     const link = `${this.frontendUrl}/invite/${params.token}`;
@@ -53,9 +57,19 @@ export class EmailService {
           <p style="color:#666;font-size:13px">Or paste this link into your browser: ${link}</p>
         `,
       });
-      if (error) this.logger.error(`Resend rejected invite email to ${params.to}: ${error.message}`);
+      if (error) {
+        this.logger.error(
+          `Resend rejected invite email to ${params.to}: ${error.message}`,
+        );
+        return false;
+      }
+      return true;
     } catch (e) {
-      this.logger.error(`Failed to send invite email to ${params.to}`, e as Error);
+      this.logger.error(
+        `Failed to send invite email to ${params.to}`,
+        e as Error,
+      );
+      return false;
     }
   }
 }

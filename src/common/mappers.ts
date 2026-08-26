@@ -1,5 +1,6 @@
 import type {
   ActivityEntry,
+  Attachment,
   Comment,
   Invite,
   Issue,
@@ -16,6 +17,7 @@ import type {
   TaskField,
   User,
 } from '@prisma/client';
+import type { StorageService } from '../storage/storage.service';
 
 // Reshapes Prisma's schema-idiomatic field names (leadId, assigneeId, cc rows, etc.)
 // into exactly what the frontend's src/types/index.ts expects.
@@ -83,17 +85,32 @@ export function mapActivityEntry(a: ActivityEntry) {
   return { id: a.id, actor: a.actorId, text: a.text, at: iso(a.createdAt) };
 }
 
+export async function mapAttachment(a: Attachment, storage: StorageService) {
+  return {
+    id: a.id,
+    filename: a.filename,
+    path: a.path,
+    url: await storage.getSignedDownloadUrl(a.path),
+    size: a.size,
+    mimeType: a.mimeType,
+    uploadedBy: a.uploadedById,
+    createdAt: iso(a.createdAt),
+  };
+}
+
 type IssueWithRelations = Issue & {
   comments: Comment[];
   activity: ActivityEntry[];
+  attachments: Attachment[];
   cc: IssueCc[];
 };
 
-export function mapIssue(i: IssueWithRelations) {
+export async function mapIssue(i: IssueWithRelations, storage: StorageService) {
   return {
     id: i.id,
     number: i.number,
     title: i.title,
+    description: i.description,
     type: i.type,
     priority: i.priority,
     assignee: i.assigneeId,
@@ -106,6 +123,9 @@ export function mapIssue(i: IssueWithRelations) {
     estimatedHours: i.estimatedHours,
     sprintId: i.sprintId,
     activity: i.activity.map(mapActivityEntry),
+    attachments: await Promise.all(
+      i.attachments.map((a) => mapAttachment(a, storage)),
+    ),
   };
 }
 
@@ -136,7 +156,7 @@ type ProjectWithRelations = Project & {
   issues: IssueWithRelations[];
 };
 
-export function mapProject(p: ProjectWithRelations) {
+export async function mapProject(p: ProjectWithRelations, storage: StorageService) {
   return {
     id: p.id,
     key: p.key,
@@ -151,7 +171,7 @@ export function mapProject(p: ProjectWithRelations) {
     store: p.storeItems.map(mapStoreItem),
     members: p.members.map(mapProjectMembership),
     statuses: p.statuses.map(mapStatus),
-    issues: p.issues.map(mapIssue),
+    issues: await Promise.all(p.issues.map((i) => mapIssue(i, storage))),
   };
 }
 
@@ -171,7 +191,10 @@ type OrganizationWithRelations = Organization & {
   subscription: Subscription | null;
 };
 
-export function mapOrganization(o: OrganizationWithRelations) {
+export async function mapOrganization(
+  o: OrganizationWithRelations,
+  storage: StorageService,
+) {
   return {
     id: o.id,
     name: o.name,
@@ -181,7 +204,7 @@ export function mapOrganization(o: OrganizationWithRelations) {
     capacityHoursPerWeek: o.capacityHoursPerWeek,
     members: o.members.map(mapMembership),
     invites: o.invites.map(mapInvite),
-    projects: o.projects.map(mapProject),
+    projects: await Promise.all(o.projects.map((p) => mapProject(p, storage))),
     subscription: o.subscription ? mapSubscription(o.subscription) : null,
   };
 }

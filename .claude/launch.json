@@ -5,6 +5,12 @@
       "name": "manageme-frontend",
       "url": "http://localhost:5173",
       "port": 5173
+    },
+    {
+      "name": "manageme-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:dev"],
+      "port": 3000
     }
   ]
 }

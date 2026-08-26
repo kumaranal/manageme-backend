@@ -26,6 +26,7 @@ import { UpdateTaskFieldDto } from './dto/task-field.dto';
 import { CreateSprintDto, UpdateSprintLengthDto } from './dto/sprint.dto';
 import { CreateStoreItemDto, UpdateStoreItemDto } from './dto/store-item.dto';
 import { mapProject } from '../common/mappers';
+import { StorageService } from '../storage/storage.service';
 import type { TaskFieldKey } from '@prisma/client';
 
 const fullProjectInclude = {
@@ -36,8 +37,9 @@ const fullProjectInclude = {
   storeItems: { include: { history: { orderBy: { at: 'desc' as const } } } },
   issues: {
     include: {
-      comments: { orderBy: { createdAt: 'asc' as const } },
+      comments: { orderBy: { createdAt: 'desc' as const } },
       activity: { orderBy: { createdAt: 'desc' as const } },
+      attachments: { orderBy: { createdAt: 'asc' as const } },
       cc: true,
     },
   },
@@ -52,6 +54,7 @@ export class ProjectsController {
     private readonly projects: ProjectsService,
     private readonly permissions: PermissionsService,
     private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
   ) {}
 
   @Get()
@@ -64,7 +67,7 @@ export class ProjectsController {
       where: { orgId },
       include: fullProjectInclude,
     });
-    return projects.map(mapProject);
+    return Promise.all(projects.map((p) => mapProject(p, this.storage)));
   }
 
   @Get(':projectId')
@@ -78,7 +81,7 @@ export class ProjectsController {
       where: { id: projectId, orgId },
       include: fullProjectInclude,
     });
-    return mapProject(project);
+    return mapProject(project, this.storage);
   }
 
   @Post()

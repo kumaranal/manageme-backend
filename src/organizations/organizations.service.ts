@@ -8,6 +8,7 @@ import { PermissionsService } from '../common/permissions.service';
 import { EmailService } from '../email/email.service';
 import { uniqueSlug } from '../common/slug';
 import { mapOrganization } from '../common/mappers';
+import { StorageService } from '../storage/storage.service';
 import { OrgRole, Prisma } from '@prisma/client';
 
 // Full nested shape the frontend's Organization type expects — a single
@@ -27,8 +28,9 @@ const fullOrgInclude = {
       },
       issues: {
         include: {
-          comments: { orderBy: { createdAt: 'asc' as const } },
+          comments: { orderBy: { createdAt: 'desc' as const } },
           activity: { orderBy: { createdAt: 'desc' as const } },
+          attachments: { orderBy: { createdAt: 'asc' as const } },
           cc: true,
         },
       },
@@ -42,6 +44,7 @@ export class OrganizationsService {
     private readonly prisma: PrismaService,
     private readonly permissions: PermissionsService,
     private readonly email: EmailService,
+    private readonly storage: StorageService,
   ) {}
 
   async listMine(userId: string) {
@@ -49,14 +52,14 @@ export class OrganizationsService {
       where: { members: { some: { userId } } },
       include: fullOrgInclude,
     });
-    return orgs.map(mapOrganization);
+    return Promise.all(orgs.map((o) => mapOrganization(o, this.storage)));
   }
 
   async listAll() {
     const orgs = await this.prisma.organization.findMany({
       include: fullOrgInclude,
     });
-    return orgs.map(mapOrganization);
+    return Promise.all(orgs.map((o) => mapOrganization(o, this.storage)));
   }
 
   async listDiscoverable(userId: string) {
@@ -72,7 +75,7 @@ export class OrganizationsService {
       include: fullOrgInclude,
     });
     if (!org) throw new NotFoundException('Organization not found');
-    return mapOrganization(org);
+    return mapOrganization(org, this.storage);
   }
 
   // Called by BillingService inside the checkout-finalize transaction — kept
@@ -140,14 +143,14 @@ export class OrganizationsService {
       this.prisma.invite.create({ data: { orgId, email, role } }),
       this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } }),
     ]);
-    await this.email.sendOrgInvite({
+    const emailSent = await this.email.sendOrgInvite({
       to: email,
       orgName: org.name,
       inviterName,
       role,
       token: invite.token,
     });
-    return { invite, org: await this.findOneOrThrow(orgId) };
+    return { invite, emailSent, org: await this.findOneOrThrow(orgId) };
   }
 
   async revokeInvite(orgId: string, inviteId: string) {

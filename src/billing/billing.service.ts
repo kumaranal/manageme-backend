@@ -139,7 +139,13 @@ export class BillingService {
     if (amount === 0) {
       await this.finalize(checkoutSessionId, 'FREE');
       const status = await this.getStatus(checkoutSessionId, userId);
-      return { checkoutSessionId, gateway: 'FREE' as const, amount, currency, ...status };
+      return {
+        checkoutSessionId,
+        gateway: 'FREE' as const,
+        amount,
+        currency,
+        ...status,
+      };
     }
 
     if (currency === 'INR') {
@@ -174,7 +180,9 @@ export class BillingService {
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Unknown error';
-        throw new BadRequestException(`Stripe rejected the checkout: ${message}`);
+        throw new BadRequestException(
+          `Stripe rejected the checkout: ${message}`,
+        );
       });
     await this.prisma.checkoutSession.update({
       where: { id: checkoutSessionId },

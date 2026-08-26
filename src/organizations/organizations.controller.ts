@@ -53,7 +53,8 @@ export class OrganizationsController {
     @Param('orgId') orgId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (!user.isSuperadmin) await this.permissions.requireOrgMember(orgId, user.id);
+    if (!user.isSuperadmin)
+      await this.permissions.requireOrgMember(orgId, user.id);
     return this.organizations.findOneOrThrow(orgId);
   }
 

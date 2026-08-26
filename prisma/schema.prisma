@@ -22,6 +22,7 @@ model User {
   ccOnIssues          IssueCc[]
   comments            Comment[]
   activityEntries     ActivityEntry[]
+  attachments         Attachment[]
   storeItemUpdates    StoreItem[]         @relation("StoreItemUpdatedBy")
   storeHistoryEntries StoreHistoryEntry[]
   checkoutSessions    CheckoutSession[]
@@ -206,6 +207,7 @@ model Issue {
   projectId      String
   number         Int
   title          String
+  description    String    @default("")
   type           IssueType
   priority       Priority
   assigneeId     String?   @db.Uuid
@@ -217,17 +219,39 @@ model Issue {
   sprintId       String?
   createdAt      DateTime  @default(now())
 
-  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee User?           @relation("IssueAssignee", fields: [assigneeId], references: [id])
-  status   Status          @relation(fields: [statusId], references: [id])
-  sprint   Sprint?         @relation(fields: [sprintId], references: [id])
-  cc       IssueCc[]
-  comments Comment[]
-  activity ActivityEntry[]
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee    User?           @relation("IssueAssignee", fields: [assigneeId], references: [id])
+  status      Status          @relation(fields: [statusId], references: [id])
+  sprint      Sprint?         @relation(fields: [sprintId], references: [id])
+  cc          IssueCc[]
+  comments    Comment[]
+  activity    ActivityEntry[]
+  attachments Attachment[]
 
   @@unique([projectId, number])
   @@index([projectId, statusId])
   @@map("issues")
+}
+
+// Files are stored in Supabase Storage; this row is just the metadata plus
+// the storage `path`, which is needed (separately from the public `url`) to
+// delete the underlying object when an attachment is removed.
+model Attachment {
+  id           String   @id @default(cuid())
+  issueId      String
+  filename     String
+  path         String
+  url          String
+  size         Int
+  mimeType     String
+  uploadedById String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  issue      Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id])
+
+  @@index([issueId])
+  @@map("attachments")
 }
 
 model IssueCc {

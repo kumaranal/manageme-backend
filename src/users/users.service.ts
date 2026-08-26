@@ -17,7 +17,11 @@ export class UsersService {
   async ensureUser(data: { id: string; email: string; name: string }) {
     return this.prisma.user.upsert({
       where: { id: data.id },
-      update: { email: data.email, name: data.name, initials: initialsOf(data.name) },
+      update: {
+        email: data.email,
+        name: data.name,
+        initials: initialsOf(data.name),
+      },
       create: {
         id: data.id,
         email: data.email,
@@ -33,7 +37,11 @@ export class UsersService {
 
   // Shared-org membership, not raw id lookup — keeps this from being a cross-tenant directory.
   private sharesOrgWith(requesterId: string) {
-    return { memberships: { some: { org: { members: { some: { userId: requesterId } } } } } };
+    return {
+      memberships: {
+        some: { org: { members: { some: { userId: requesterId } } } },
+      },
+    };
   }
 
   findByIds(requesterId: string, ids: string[]) {

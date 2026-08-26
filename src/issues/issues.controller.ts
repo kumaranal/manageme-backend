@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,9 +8,12 @@ import {
   Patch,
   Post,
   Put,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { IssuesService } from './issues.service';
 import { PermissionsService } from '../common/permissions.service';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -19,6 +23,8 @@ import { CreateIssueDto } from './dto/create-issue.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
 import { MoveIssueDto } from './dto/move-issue.dto';
 import { AddCommentDto } from './dto/add-comment.dto';
+
+const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
 
 @ApiTags('issues')
 @ApiBearerAuth('bearer')
@@ -124,5 +130,42 @@ export class IssuesController {
   ) {
     await this.permissions.requireProjectEdit(orgId, projectId, user.id);
     return this.issues.removeCc(orgId, projectId, issueId, ccUserId);
+  }
+
+  @Post(':issueId/attachments')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_ATTACHMENT_SIZE_BYTES },
+    }),
+  )
+  async addAttachment(
+    @Param('orgId') orgId: string,
+    @Param('projectId') projectId: string,
+    @Param('issueId') issueId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException('No file provided');
+    await this.permissions.requireProjectEdit(orgId, projectId, user.id);
+    return this.issues.addAttachment(orgId, projectId, issueId, user.id, file);
+  }
+
+  @Delete(':issueId/attachments/:attachmentId')
+  async removeAttachment(
+    @Param('orgId') orgId: string,
+    @Param('projectId') projectId: string,
+    @Param('issueId') issueId: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.permissions.requireProjectEdit(orgId, projectId, user.id);
+    return this.issues.removeAttachment(
+      orgId,
+      projectId,
+      issueId,
+      attachmentId,
+      user.id,
+    );
   }
 }
