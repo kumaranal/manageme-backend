@@ -2,13 +2,16 @@ import type {
   ActivityEntry,
   Attachment,
   Comment,
+  GitConnection,
   Invite,
   Issue,
+  IssueBranch,
   IssueCc,
   Membership,
   Organization,
   Project,
   ProjectMembership,
+  ProjectRepo,
   Sprint,
   Status,
   StoreItem,
@@ -98,11 +101,25 @@ export async function mapAttachment(a: Attachment, storage: StorageService) {
   };
 }
 
+export function mapIssueBranch(b: IssueBranch) {
+  return {
+    id: b.id,
+    branchName: b.branchName,
+    createdBy: b.createdById,
+    prNumber: b.prNumber,
+    prState: b.prState,
+    prUrl: b.prUrl,
+    prTitle: b.prTitle,
+    createdAt: iso(b.createdAt),
+  };
+}
+
 type IssueWithRelations = Issue & {
   comments: Comment[];
   activity: ActivityEntry[];
   attachments: Attachment[];
   cc: IssueCc[];
+  branches: IssueBranch[];
 };
 
 export async function mapIssue(i: IssueWithRelations, storage: StorageService) {
@@ -126,6 +143,7 @@ export async function mapIssue(i: IssueWithRelations, storage: StorageService) {
     attachments: await Promise.all(
       i.attachments.map((a) => mapAttachment(a, storage)),
     ),
+    branches: i.branches.map(mapIssueBranch),
   };
 }
 
@@ -147,6 +165,16 @@ export function mapStoreItem(s: StoreItemWithHistory) {
   };
 }
 
+export function mapProjectRepo(r: ProjectRepo) {
+  return {
+    id: r.id,
+    repoId: r.repoId,
+    repoFullName: r.repoFullName,
+    defaultBranch: r.defaultBranch,
+    linkedBy: r.linkedById,
+  };
+}
+
 type ProjectWithRelations = Project & {
   members: ProjectMembership[];
   taskFields: TaskField[];
@@ -154,6 +182,7 @@ type ProjectWithRelations = Project & {
   sprints: Sprint[];
   storeItems: StoreItemWithHistory[];
   issues: IssueWithRelations[];
+  repo: ProjectRepo | null;
 };
 
 export async function mapProject(p: ProjectWithRelations, storage: StorageService) {
@@ -172,6 +201,7 @@ export async function mapProject(p: ProjectWithRelations, storage: StorageServic
     members: p.members.map(mapProjectMembership),
     statuses: p.statuses.map(mapStatus),
     issues: await Promise.all(p.issues.map((i) => mapIssue(i, storage))),
+    repo: p.repo ? mapProjectRepo(p.repo) : null,
   };
 }
 
@@ -184,11 +214,22 @@ export function mapSubscription(s: Subscription) {
   };
 }
 
+export function mapGitConnection(c: GitConnection) {
+  return {
+    id: c.id,
+    accountLogin: c.accountLogin,
+    accountType: c.accountType,
+    connectedBy: c.connectedById,
+    createdAt: iso(c.createdAt),
+  };
+}
+
 type OrganizationWithRelations = Organization & {
   members: Membership[];
   invites: Invite[];
   projects: ProjectWithRelations[];
   subscription: Subscription | null;
+  gitConnection: GitConnection | null;
 };
 
 export async function mapOrganization(
@@ -206,5 +247,6 @@ export async function mapOrganization(
     invites: o.invites.map(mapInvite),
     projects: await Promise.all(o.projects.map((p) => mapProject(p, storage))),
     subscription: o.subscription ? mapSubscription(o.subscription) : null,
+    gitConnection: o.gitConnection ? mapGitConnection(o.gitConnection) : null,
   };
 }

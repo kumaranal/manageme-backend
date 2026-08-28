@@ -27,6 +27,9 @@ model User {
   storeHistoryEntries StoreHistoryEntry[]
   checkoutSessions    CheckoutSession[]
   payments            Payment[]
+  gitConnections      GitConnection[]
+  projectRepos        ProjectRepo[]
+  issueBranches       IssueBranch[]
 
   @@map("users")
 }
@@ -45,11 +48,12 @@ model Organization {
   capacityHoursPerWeek Int       @default(40)
   createdAt            DateTime  @default(now())
 
-  members      Membership[]
-  invites      Invite[]
-  projects     Project[]
-  subscription Subscription?
-  payments     Payment[]
+  members       Membership[]
+  invites       Invite[]
+  projects      Project[]
+  subscription  Subscription?
+  payments      Payment[]
+  gitConnection GitConnection?
 
   @@map("organizations")
 }
@@ -104,6 +108,7 @@ model Project {
   sprints       Sprint[]
   issues        Issue[]
   storeItems    StoreItem[]
+  repo          ProjectRepo?
 
   @@unique([orgId, key])
   @@map("projects")
@@ -227,6 +232,7 @@ model Issue {
   comments    Comment[]
   activity    ActivityEntry[]
   attachments Attachment[]
+  branches    IssueBranch[]
 
   @@unique([projectId, number])
   @@index([projectId, statusId])
@@ -469,4 +475,81 @@ model Payment {
   user            User            @relation(fields: [userId], references: [id])
 
   @@map("payments")
+}
+
+// --- Git integration -------------------------------------------------------
+// GitHub App installation tokens are minted on demand from the App's private
+// key (GITHUB_APP_PRIVATE_KEY) + the stored installationId — nothing
+// long-lived or sensitive is persisted here.
+
+enum GitProvider {
+  GITHUB
+}
+
+// Org-level: one connected GitHub App installation per organization.
+model GitConnection {
+  id             String      @id @default(cuid())
+  orgId          String      @unique
+  provider       GitProvider @default(GITHUB)
+  installationId String
+  accountLogin   String
+  accountType    String // "Organization" | "User"
+  connectedById  String      @db.Uuid
+  createdAt      DateTime    @default(now())
+
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  connectedBy User          @relation(fields: [connectedById], references: [id])
+  repos       ProjectRepo[]
+
+  @@map("git_connections")
+}
+
+// Project-level: which repo (within the org's connected installation) this
+// project's branches are created against.
+model ProjectRepo {
+  id              String   @id @default(cuid())
+  projectId       String   @unique
+  gitConnectionId String
+  repoId          Int // GitHub's numeric repo id, stable across renames
+  repoFullName    String
+  defaultBranch   String
+  linkedById      String   @db.Uuid
+  createdAt       DateTime @default(now())
+
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gitConnection GitConnection @relation(fields: [gitConnectionId], references: [id], onDelete: Cascade)
+  linkedBy      User          @relation(fields: [linkedById], references: [id])
+  branches      IssueBranch[]
+
+  @@map("project_repos")
+}
+
+enum PrState {
+  NONE
+  OPEN
+  DRAFT
+  MERGED
+  CLOSED
+}
+
+model IssueBranch {
+  id            String   @id @default(cuid())
+  issueId       String
+  projectRepoId String
+  branchName    String
+  createdById   String   @db.Uuid
+  prNumber      Int?
+  prState       PrState  @default(NONE)
+  prUrl         String?
+  prTitle       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  issue       Issue       @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  projectRepo ProjectRepo @relation(fields: [projectRepoId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation(fields: [createdById], references: [id])
+
+  @@unique([projectRepoId, branchName])
+  @@index([issueId])
+  @@map("issue_branches")
 }

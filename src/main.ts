@@ -8,6 +8,15 @@ async function bootstrap() {
   // computed over the exact raw request bytes rather than the parsed JSON.
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
+  // TEMP debug logging for the GitHub connect flow — remove once it's working.
+  app.use((req: any, res: any, next: any) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      console.log(`[http] ${req.method} ${req.originalUrl} -> ${res.statusCode} (${Date.now() - start}ms)`);
+    });
+    next();
+  });
+
   app.enableCors({
     origin: (process.env.FRONTEND_URL ?? 'http://localhost:5173').split(','),
     credentials: true,

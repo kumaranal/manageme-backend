@@ -17,6 +17,7 @@ const fullOrgInclude = {
   members: true,
   invites: true,
   subscription: true,
+  gitConnection: true,
   projects: {
     include: {
       members: true,
@@ -32,8 +33,10 @@ const fullOrgInclude = {
           activity: { orderBy: { createdAt: 'desc' as const } },
           attachments: { orderBy: { createdAt: 'asc' as const } },
           cc: true,
+          branches: { orderBy: { createdAt: 'asc' as const } },
         },
       },
+      repo: true,
     },
   },
 };
