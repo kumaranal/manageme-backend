@@ -13,6 +13,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { IssuesModule } from './issues/issues.module';
 import { BillingModule } from './billing/billing.module';
 import { AdminModule } from './admin/admin.module';
+import { GitIntegrationModule } from './git-integration/git-integration.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AdminModule } from './admin/admin.module';
     IssuesModule,
     BillingModule,
     AdminModule,
+    GitIntegrationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

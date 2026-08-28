@@ -41,8 +41,10 @@ const fullProjectInclude = {
       activity: { orderBy: { createdAt: 'desc' as const } },
       attachments: { orderBy: { createdAt: 'asc' as const } },
       cc: true,
+      branches: { orderBy: { createdAt: 'asc' as const } },
     },
   },
+  repo: true,
 };
 
 @ApiTags('projects')
